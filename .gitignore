@@ -312,3 +312,6 @@ $RECYCLE.BIN/
 # CSV files
 *.csv
 # End of https://www.gitignore.io/api/scala,macos,python,pycharm,windows,jetbrains
+
+# null files
+./null
