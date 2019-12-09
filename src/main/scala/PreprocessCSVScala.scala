@@ -48,7 +48,7 @@ object PreprocessCSVScala {
     spark.sparkContext.setLogLevel("ERROR")
 
     val file = "1996.csv"
-    val inputPath = "src/main/resources/input/"+file
+    val inputPath = "src/main/resources/input/" + file
 
     val csv_DF = spark.read.format("csv").option("header", "true").load(inputPath)
 
@@ -92,24 +92,35 @@ object PreprocessCSVScala {
     filtered_DF.select(filtered_DF.columns.map(c => sum(col(c).isNull.cast(IntegerType)).alias(c)): _*).show()
     println("Number of rows before removal: " + filtered_DF.count())
 
-    filtered_DF = filtered_DF.na.drop()
-    println("Number of rows after removal: " + filtered_DF.count())
+    var indexed_DF = filtered_DF.na.drop()
+    println("Number of rows after removal: " + indexed_DF.count())
 
-    var indexed_DF = indexString(filtered_DF, "Origin")
-    indexed_DF = indexString(indexed_DF, "Dest")
-    indexed_DF = indexString(indexed_DF, "UniqueCarrier")
+    val colNamesList = indexed_DF.columns
+    val columnDataTypes: Array[String] = indexed_DF.schema.fields.map(x => x.dataType).map(x => x.toString)
 
-    indexed_DF = minMaxScaler(indexed_DF, "Month")
-    indexed_DF = minMaxScaler(indexed_DF, "DayofMonth")
-    indexed_DF = minMaxScaler(indexed_DF, "DayOfWeek")
-    indexed_DF = minMaxScaler(indexed_DF, "DepTime")
-    indexed_DF = minMaxScaler(indexed_DF, "CRSDepTime")
-    indexed_DF = minMaxScaler(indexed_DF, "CRSArrTime")
-    indexed_DF = minMaxScaler(indexed_DF, "CRSElapsedTime")
-    indexed_DF = minMaxScaler(indexed_DF, "ArrDelay")
-    indexed_DF = minMaxScaler(indexed_DF, "DepDelay")
-    indexed_DF = minMaxScaler(indexed_DF, "Distance")
-    indexed_DF = minMaxScaler(indexed_DF, "TaxiOut")
+    for (i <- colNamesList.indices) {
+      if (columnDataTypes(i) == "StringType") {
+        indexed_DF = indexString(indexed_DF, colNamesList(i))
+      } else {
+        indexed_DF = minMaxScaler(indexed_DF, colNamesList(i))
+      }
+    }
+
+    //indexed_DF = indexString(filtered_DF, "Origin")
+    //indexed_DF = indexString(indexed_DF, "Dest")
+    //indexed_DF = indexString(indexed_DF, "UniqueCarrier")
+
+    //indexed_DF = minMaxScaler(indexed_DF, "Month")
+    //indexed_DF = minMaxScaler(indexed_DF, "DayofMonth")
+    //indexed_DF = minMaxScaler(indexed_DF, "DayOfWeek")
+    //indexed_DF = minMaxScaler(indexed_DF, "DepTime")
+    //indexed_DF = minMaxScaler(indexed_DF, "CRSDepTime")
+    //indexed_DF = minMaxScaler(indexed_DF, "CRSArrTime")
+    //indexed_DF = minMaxScaler(indexed_DF, "CRSElapsedTime")
+    //indexed_DF = minMaxScaler(indexed_DF, "ArrDelay")
+    //indexed_DF = minMaxScaler(indexed_DF, "DepDelay")
+    //indexed_DF = minMaxScaler(indexed_DF, "Distance")
+    //indexed_DF = minMaxScaler(indexed_DF, "TaxiOut")
 
     //println("Printing first 20 rows after indexing.")
     //indexed_DF.show(20)
@@ -123,5 +134,10 @@ object PreprocessCSVScala {
 
     //val outputPath = "src/main/resources/output"
     //df.coalesce(1).write.format("csv").option("header", "true").save(outputPath)
+
+    spark.sqlContext.clearCache()
+    spark.sparkContext.clearCallSite()
+    spark.sparkContext.clearJobGroup()
+    spark.close()
   }
 }
