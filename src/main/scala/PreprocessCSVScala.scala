@@ -1,8 +1,9 @@
+import org.apache.spark.SparkConf
 import org.apache.spark.ml.feature.{MinMaxScaler, StringIndexer}
 import org.apache.spark.ml.linalg.{DenseVector, Vectors}
 import org.apache.spark.sql.functions.{col, sum, udf}
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StringType}
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{DataFrame, SparkSession, functions}
 
 object PreprocessCSVScala {
 
@@ -16,7 +17,7 @@ object PreprocessCSVScala {
       .drop(inputCol)
       .withColumnRenamed(inputCol + "Scaled", inputCol)
 
-    indexed_DF
+    minMaxScaler(indexed_DF, inputCol)
   }
 
   def minMaxScaler(df: DataFrame, inputCol: String): DataFrame = {
@@ -44,13 +45,20 @@ object PreprocessCSVScala {
       .master("local[*]")
       .appName("HomeworkSpark")
       .getOrCreate
+    val conf = new SparkConf().setAppName("HomeworkSpark").setMaster("local[*]")
 
+    conf.set("es.index.auto.create", "true")
+
+    val sc = spark.sparkContext
+    val sqlc = spark.sqlContext
     spark.sparkContext.setLogLevel("ERROR")
 
-    val file = "1996.csv"
-    val inputPath = "src/main/resources/input/" + file
+    val inputPath = "src/main/resources/input/"
 
-    val csv_DF = spark.read.format("csv").option("header", "true").load(inputPath)
+    val csv_DF = sqlc.read.format("csv")
+      .option("header", "true")
+      .option("inferSchema", "true")
+      .load(inputPath + "2007.csv")
 
     val cleanInitial_DF = csv_DF.drop("ArrTime")
       .drop("ActualElapsedTime")
@@ -63,14 +71,14 @@ object PreprocessCSVScala {
       .drop("SecurityDelay")
       .drop("LateAircraftDelay")
       .drop("CancellationCode")
-      .drop("FlightNum")
       .drop("Year")
-      .drop("TailNum")
 
     // We use this lines to cast the data to the corresponding ones from the dataset
     val casted_DF = cleanInitial_DF.withColumn("Month", col("Month").cast(IntegerType))
       .withColumn("DayofMonth", col("DayofMonth").cast(IntegerType))
       .withColumn("DayOfWeek", col("DayOfWeek").cast(IntegerType))
+      .withColumn("FlightNum", col("FlightNum").cast(StringType))
+      .withColumn("TailNum", col("TailNum").cast(StringType))
       .withColumn("DepTime", col("DepTime").cast(IntegerType))
       .withColumn("CRSDepTime", col("CRSDepTime").cast(IntegerType))
       .withColumn("CRSArrTime", col("CRSArrTime").cast(IntegerType))
@@ -95,49 +103,36 @@ object PreprocessCSVScala {
     var indexed_DF = filtered_DF.na.drop()
     println("Number of rows after removal: " + indexed_DF.count())
 
+    //Comment this line to generate a Dataset for Linear Regression
+    indexed_DF = indexed_DF.withColumn("ArrDelay", functions.when(functions.col("ArrDelay") > 0, 1.0).otherwise(0.0))
+
     val colNamesList = indexed_DF.columns
     val columnDataTypes: Array[String] = indexed_DF.schema.fields.map(x => x.dataType).map(x => x.toString)
 
     for (i <- colNamesList.indices) {
-      if (columnDataTypes(i) == "StringType") {
-        indexed_DF = indexString(indexed_DF, colNamesList(i))
-      } else {
-        indexed_DF = minMaxScaler(indexed_DF, colNamesList(i))
+      if (colNamesList(i) != "ArrDelay") {
+        if (columnDataTypes(i) == "StringType") {
+          indexed_DF = indexString(indexed_DF, colNamesList(i))
+        } else {
+          indexed_DF = minMaxScaler(indexed_DF, colNamesList(i))
+        }
       }
     }
 
-    //indexed_DF = indexString(filtered_DF, "Origin")
-    //indexed_DF = indexString(indexed_DF, "Dest")
-    //indexed_DF = indexString(indexed_DF, "UniqueCarrier")
-
-    //indexed_DF = minMaxScaler(indexed_DF, "Month")
-    //indexed_DF = minMaxScaler(indexed_DF, "DayofMonth")
-    //indexed_DF = minMaxScaler(indexed_DF, "DayOfWeek")
-    //indexed_DF = minMaxScaler(indexed_DF, "DepTime")
-    //indexed_DF = minMaxScaler(indexed_DF, "CRSDepTime")
-    //indexed_DF = minMaxScaler(indexed_DF, "CRSArrTime")
-    //indexed_DF = minMaxScaler(indexed_DF, "CRSElapsedTime")
-    //indexed_DF = minMaxScaler(indexed_DF, "ArrDelay")
-    //indexed_DF = minMaxScaler(indexed_DF, "DepDelay")
-    //indexed_DF = minMaxScaler(indexed_DF, "Distance")
-    //indexed_DF = minMaxScaler(indexed_DF, "TaxiOut")
-
-    //println("Printing first 20 rows after indexing.")
-    //indexed_DF.show(20)
-
     //Here we reorder the columns, so the response variables are first and the explanatory is at the end of the DataFrame
-    val reordered: Array[String] = Array("Month", "DayofMonth", "DayOfWeek", "DepTime", "CRSDepTime", "CRSArrTime", "UniqueCarrier", "CRSElapsedTime", "DepDelay", "Origin", "Dest", "Distance", "TaxiOut", "ArrDelay")
+    val reordered: Array[String] = Array("Month", "DayofMonth", "DayOfWeek", "FlightNum", "TailNum", "DepTime", "CRSDepTime", "CRSArrTime",
+      "UniqueCarrier", "CRSElapsedTime", "DepDelay", "Origin", "Dest", "Distance", "TaxiOut", "ArrDelay")
     val df = indexed_DF.select(reordered.head, reordered.tail: _*)
 
     df.printSchema()
-    df.show(20)
+    df.show(5)
 
-    //val outputPath = "src/main/resources/output"
-    //df.coalesce(1).write.format("csv").option("header", "true").save(outputPath)
+    val outputPath = "src/main/resources/outputLinearRegression"
+    df.coalesce(1).write.format("csv").option("header", "true").save(outputPath)
 
-    spark.sqlContext.clearCache()
-    spark.sparkContext.clearCallSite()
-    spark.sparkContext.clearJobGroup()
+    sqlc.clearCache()
+    sc.clearCallSite()
+    sc.clearJobGroup()
     spark.close()
   }
 }

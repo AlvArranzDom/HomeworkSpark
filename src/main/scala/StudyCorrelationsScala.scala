@@ -1,8 +1,52 @@
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.ml.classification.RandomForestClassifier
+import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, MulticlassClassificationEvaluator}
+import org.apache.spark.ml.feature.VectorAssembler
+import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 object StudyCorrelationsScala {
+
+  def trainRandomForestClassifier(training: DataFrame, test: DataFrame): Unit = {
+    val rf = new RandomForestClassifier().setLabelCol("label").setFeaturesCol("features").setNumTrees(10)
+    val model = rf.fit(training)
+
+    val predictions = model.transform(test)
+    predictions.show(5)
+
+    // Show the metrics
+    val evaluator = new MulticlassClassificationEvaluator()
+      .setLabelCol("label")
+      .setPredictionCol("prediction")
+      .setMetricName("accuracy")
+    val accuracy = evaluator.evaluate(predictions)
+    println(s"Test Error = ${(1.0 - accuracy)}")
+  }
+
+  def trainLinearRegression(training: DataFrame, test: DataFrame): Unit = {
+    val lr = new LinearRegression().setMaxIter(1000).setRegParam(0.6).setElasticNetParam(0.8)
+    val model = lr.fit(training)
+
+    println(s"Coefficients: ${model.coefficients} Intercept: ${model.intercept}")
+
+    val trainingSummary = model.summary
+    println(s"numIterations: ${trainingSummary.totalIterations}")
+    println(s"objectiveHistory: [${trainingSummary.objectiveHistory.mkString(",")}]")
+    trainingSummary.residuals.show()
+    println(s"RMSE: ${trainingSummary.rootMeanSquaredError}")
+    println(s"r2: ${trainingSummary.r2}")
+
+    val predictions = model.transform(test)
+    predictions.show
+
+    // Show the metrics
+    val evaluator = new BinaryClassificationEvaluator().setLabelCol("label").setRawPredictionCol("prediction")
+      .setMetricName("areaUnderROC")
+    val accuracy = evaluator.evaluate(predictions)
+    println(s"Accuracy: $accuracy")
+  }
+
   def main(args: Array[String]): Unit = {
 
     val spark = SparkSession.builder
@@ -12,8 +56,8 @@ object StudyCorrelationsScala {
 
     spark.sparkContext.setLogLevel("ERROR")
 
-    val file = "normalized1996.csv"
-    val inputPath = "src/main/resources/output/" + file
+    val file = "normalized2007.csv"
+    val inputPath = "src/main/resources/outputLinearRegression/" + file
 
     val normalized_DF = spark.read.format("csv").option("header", "true").load(inputPath)
 
@@ -21,6 +65,8 @@ object StudyCorrelationsScala {
       .withColumn("DayofMonth", col("DayofMonth").cast(DoubleType))
       .withColumn("DayOfWeek", col("DayOfWeek").cast(DoubleType))
       .withColumn("DepTime", col("DepTime").cast(DoubleType))
+      .withColumn("FlightNum", col("FlightNum").cast(DoubleType))
+      .withColumn("TailNum", col("TailNum").cast(DoubleType))
       .withColumn("CRSDepTime", col("CRSDepTime").cast(DoubleType))
       .withColumn("CRSArrTime", col("CRSArrTime").cast(DoubleType))
       .withColumn("CRSElapsedTime", col("CRSElapsedTime").cast(DoubleType))
@@ -32,57 +78,37 @@ object StudyCorrelationsScala {
       .withColumn("UniqueCarrier", col("UniqueCarrier").cast(DoubleType))
       .withColumn("TaxiOut", col("TaxiOut").cast(DoubleType))
 
-    val correlation1 = df.stat.corr("ArrDelay", "Month")
-    println(s"correlation between column ArrDelay and Month = $correlation1")
+    var statistic_DF = df.withColumnRenamed("ArrDelay", "label")
+    val colNamesList = statistic_DF.columns
+    var featuresColsNames = Array[String]()
 
-    val correlation2 = df.stat.corr("ArrDelay", "DayofMonth")
-    println(s"correlation between column ArrDelay and DayofMonth = $correlation2")
+    for (i <- colNamesList.indices) {
+      val colName = colNamesList(i)
 
-    val correlation3 = df.stat.corr("ArrDelay", "DayOfWeek")
-    println(s"correlation between column ArrDelay and DayOfWeek = $correlation3")
+      if (colName != "label") {
+        val correlation = statistic_DF.stat.corr("label", colNamesList(i))
+        println(s"correlation between column ArrDelay and $colName = $correlation")
+        if (correlation < 0.29) {
+          statistic_DF = statistic_DF.drop(colName)
+        } else {
+          featuresColsNames = colName +: featuresColsNames
+        }
+      }
+    }
 
-    val correlation4 = df.stat.corr("ArrDelay", "DepTime")
-    println(s"correlation between column ArrDelay and DepTime = $correlation4")
+    statistic_DF.printSchema()
+    statistic_DF.show(5)
 
-    val correlation5 = df.stat.corr("ArrDelay", "CRSDepTime")
-    println(s"correlation between column ArrDelay and CRSDepTime = $correlation5")
+    val assembler = new VectorAssembler().setInputCols(featuresColsNames).setOutputCol("features")
+    val model_DF = assembler.transform(statistic_DF)
 
-    val correlation6 = df.stat.corr("ArrDelay", "CRSArrTime")
-    println(s"correlation between column ArrDelay and CRSArrTime = $correlation6")
+    model_DF.printSchema()
+    model_DF.show(5)
 
-    val correlation7 = df.stat.corr("ArrDelay", "UniqueCarrier")
-    println(s"correlation between column ArrDelay and UniqueCarrier = $correlation7")
+    val Array(training, test) = model_DF.select("label", "features").
+      randomSplit(Array(0.7, 0.3), seed = 300000)
 
-    val correlation8 = df.stat.corr("ArrDelay", "CRSElapsedTime")
-    println(s"correlation between column ArrDelay and CRSElapsedTime = $correlation8")
-
-    val correlation9 = df.stat.corr("ArrDelay", "DepDelay")
-    println(s"correlation between column ArrDelay and DepDelay = $correlation9")
-
-    val correlation10 = df.stat.corr("ArrDelay", "Origin")
-    println(s"correlation between column ArrDelay and Origin = $correlation10")
-
-    val correlation11 = df.stat.corr("ArrDelay", "Dest")
-    println(s"correlation between column ArrDelay and Dest = $correlation11")
-
-    val correlation12 = df.stat.corr("ArrDelay", "Distance")
-    println(s"correlation between column ArrDelay and Distance = $correlation12")
-
-    val correlation13 = df.stat.corr("ArrDelay", "TaxiOut")
-    println(s"correlation between column ArrDelay and TaxiOut = $correlation13")
-
-    // Drop correlation values less than 0.10
-    val statistic_DF = df.drop("Month")
-      .drop("DayofMonth")
-      .drop("DayOfWeek")
-      .drop("DepTime")
-      .drop("UniqueCarrier")
-      .drop("CRSElapsedTime")
-      .drop("Origin")
-      .drop("Dest")
-      .drop("Distance")
-
-    //val Row(coeff1: Matrix) = Correlation.corr(df, "ArrDelay").head
-    //println("Pearson correlation matrix:\n" + coeff1.toString)
+    //trainRandomForestClassifier(training, test)
+    trainLinearRegression(training, test)
   }
 }
