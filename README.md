@@ -1,8 +1,43 @@
 # HomeworkSpark
 
-## How to execute
+## Project Dependencies
 
-1. Execute PreprocessCSVScala. This process will follow the next steps:
+ - Spark Core Library (`v2.4.4`)
+ - Spark SQL Library (`v2.4.4`)
+ - Spark MLlib Library (`v2.4.4`)
+ 
+## Project Structure
+
+```
+│-- README.md
+│-- .gitignore
+│-- .gitattributes
+│-- build.sbt    
+│
+└───project
+│   │-- build.properties
+│   
+└───src
+    │   
+    └───main
+        │   
+        └───resources
+        │   │   
+        │   └───input -> Input CSV Folder
+        │       │-- README.md
+        │   
+        └───scala
+            │   
+            └───helpers
+            │   │-- DataFrameFunctions.scala -> Object with functions to modify dataframes.
+            │   │-- TrainingModelsFunctions.scala -> Object with functions to train ML models.
+            │-- PreprocessCSV.scala -> Main Object to preprocess and prepare dataframe.
+            │-- PreprocessCSV.scala -> Main Object to study and train ML Models.
+```
+
+## How to execute the project
+
+1. Execute **PreprocessCSV**. This scala object will follow the next steps:
     1. Clean Initial Information that is mandatory to delete.
     2. Cast columns to prepare the dataset.
     3. Filter to get the non cancelled flights and the non NA & Null values.
@@ -11,10 +46,19 @@
         2. Index integer between 1 and 0, taking the maximum and minimum.
     5. Reorder the information putting in the last place the response variable.
     6. Save Preprocessed & Normalized Dataset into a CSV output directory.
-2. Using the info generated from this Process, you will be able to analyze correlations.
+2. Execute **StudyTrainModels**. This scala object will use the previous Dataset, it will follow the next steps:
+    1. Cast columns to prepare the dataset.
+    2. Create the final dataframe by:
+        1. Analyzing Correlations
+        2. Drop non acceptable columns by its correlation value, comparing it with a threshold.
+        3. Create the Features Vector by using the Vector Assembler.
+    3. Train the selected model providing final dataframe and model name to be trained (See available Models in next section)
 
-## Next Steps
+## Available Models To Train
 
-- Work with the information related from the correlation, trying to study more the dataset.
-- Study the different models available in Spark Scala.
-- Start training the models with the normalized dataset. (Exists the possibility of generates two normalized datasets of differents years and join them to have more training information.)
+#### Regression
+ - Linear Regression (`modelName = 'lr'`)`
+ 
+
+#### Classification
+ - Random Forest Classifier (`modelName = 'rf'`)

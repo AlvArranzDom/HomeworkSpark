@@ -1,43 +1,40 @@
+import java.io.File
+
 import org.apache.spark.SparkConf
-import org.apache.spark.ml.feature.{MinMaxScaler, StringIndexer}
-import org.apache.spark.ml.linalg.{DenseVector, Vectors}
-import org.apache.spark.sql.functions.{col, sum, udf}
-import org.apache.spark.sql.types.{DoubleType, IntegerType, StringType}
-import org.apache.spark.sql.{DataFrame, SparkSession, functions}
+import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.{SparkSession, functions}
+import org.apache.spark.sql.types.{IntegerType, StringType}
 
-object PreprocessCSVScala {
+import helpers.DataFrameFunctions.{dropNAValues, normalizedDataFrame}
 
-  def indexString(df: DataFrame, inputCol: String): DataFrame = {
-    val indexer = new StringIndexer()
-      .setInputCol(inputCol)
-      .setOutputCol(inputCol + "Scaled")
-
-    val indexed_DF = indexer.fit(df)
-      .transform(df)
-      .drop(inputCol)
-      .withColumnRenamed(inputCol + "Scaled", inputCol)
-
-    minMaxScaler(indexed_DF, inputCol)
+object PreprocessCSV {
+  /**
+   * Function that list all the files inside a directory.
+   *
+   * @param dir directory where to find the csv.
+   */
+  def getListOfFiles(dir: String): List[File] = {
+    val d = new File(dir)
+    if (d.exists && d.isDirectory) {
+      d.listFiles.filter(_.isFile).toList
+    } else {
+      List[File]()
+    }
   }
 
-  def minMaxScaler(df: DataFrame, inputCol: String): DataFrame = {
-    val vectorizeCol = udf((v: Double) => Vectors.dense(Array(v)))
-    val headValue = udf((arr: DenseVector) => arr.toArray(0))
-    val newDF = df.withColumn(inputCol + "Vec", vectorizeCol(df(inputCol)))
+  /**
+   * Function that rename the csv write output method to a common name.
+   *
+   * @param dir directory where to find the csv.
+   */
+  def renameOutputCSV(dir: String): Unit = {
+    val listFiles = getListOfFiles(dir)
 
-    val scalerArrDelay = new MinMaxScaler()
-      .setInputCol(inputCol + "Vec")
-      .setOutputCol(inputCol + "Scaled")
-      .setMax(1)
-      .setMin(0)
-
-    val scaled_DF = scalerArrDelay.fit(newDF)
-      .transform(newDF)
-      .drop(inputCol)
-      .drop(inputCol + "Vec")
-      .withColumnRenamed(inputCol + "Scaled", inputCol)
-
-    scaled_DF.withColumn(inputCol, headValue(col(inputCol)).cast(DoubleType))
+    for (file <- listFiles) {
+      if (file.getName.contains(".csv")) {
+        file.renameTo(new File(dir + "/normalized.csv"))
+      }
+    }
   }
 
   def main(args: Array[String]) {
@@ -58,7 +55,7 @@ object PreprocessCSVScala {
     val csv_DF = sqlc.read.format("csv")
       .option("header", "true")
       .option("inferSchema", "true")
-      .load(inputPath + "2007.csv")
+      .load(inputPath + "1996.csv")
 
     val cleanInitial_DF = csv_DF.drop("ArrTime")
       .drop("ActualElapsedTime")
@@ -96,39 +93,25 @@ object PreprocessCSVScala {
     var filtered_DF = casted_DF.filter("Cancelled == 0")
     filtered_DF = filtered_DF.drop("Cancelled")
 
-    // We use this to see NA values.
-    filtered_DF.select(filtered_DF.columns.map(c => sum(col(c).isNull.cast(IntegerType)).alias(c)): _*).show()
-    println("Number of rows before removal: " + filtered_DF.count())
+    var indexed_DF = dropNAValues(filtered_DF)
 
-    var indexed_DF = filtered_DF.na.drop()
-    println("Number of rows after removal: " + indexed_DF.count())
+    //Create New Variable for Classification Models Prediction
+    indexed_DF = indexed_DF.withColumn("ArrDelayStatus", functions.when(functions.col("ArrDelay") > 0, 1.0).otherwise(0.0))
 
-    //Comment this line to generate a Dataset for Linear Regression
-    indexed_DF = indexed_DF.withColumn("ArrDelay", functions.when(functions.col("ArrDelay") > 0, 1.0).otherwise(0.0))
-
-    val colNamesList = indexed_DF.columns
-    val columnDataTypes: Array[String] = indexed_DF.schema.fields.map(x => x.dataType).map(x => x.toString)
-
-    for (i <- colNamesList.indices) {
-      if (colNamesList(i) != "ArrDelay") {
-        if (columnDataTypes(i) == "StringType") {
-          indexed_DF = indexString(indexed_DF, colNamesList(i))
-        } else {
-          indexed_DF = minMaxScaler(indexed_DF, colNamesList(i))
-        }
-      }
-    }
+    // Normalize DataFrame Columns using StringIndexer & MinMaxScales
+    val normalized_DF = normalizedDataFrame(indexed_DF, Array("ArrDelay", "ArrDelayStatus"))
 
     //Here we reorder the columns, so the response variables are first and the explanatory is at the end of the DataFrame
     val reordered: Array[String] = Array("Month", "DayofMonth", "DayOfWeek", "FlightNum", "TailNum", "DepTime", "CRSDepTime", "CRSArrTime",
-      "UniqueCarrier", "CRSElapsedTime", "DepDelay", "Origin", "Dest", "Distance", "TaxiOut", "ArrDelay")
-    val df = indexed_DF.select(reordered.head, reordered.tail: _*)
+      "UniqueCarrier", "CRSElapsedTime", "DepDelay", "Origin", "Dest", "Distance", "TaxiOut", "ArrDelay", "ArrDelayStatus")
+    val df = normalized_DF.select(reordered.head, reordered.tail: _*)
 
     df.printSchema()
     df.show(5)
 
-    val outputPath = "src/main/resources/outputLinearRegression"
+    val outputPath = "src/main/resources/output"
     df.coalesce(1).write.format("csv").option("header", "true").save(outputPath)
+    renameOutputCSV(outputPath)
 
     sqlc.clearCache()
     sc.clearCallSite()
