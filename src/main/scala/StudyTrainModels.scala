@@ -43,7 +43,7 @@ object StudyTrainModels {
     // Train Regression Model
     df = df.drop("ArrDelayStatus")
     val lr_model_DF = createDataFrameForModel(df, "ArrDelay", THRESHOLD)
-    trainModel("lr", lr_model_DF)
+    trainModel("rfr", lr_model_DF)
 
     // Train Classification Model
     //df = df.drop("ArrDelay")

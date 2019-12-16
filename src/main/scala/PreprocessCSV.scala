@@ -55,7 +55,7 @@ object PreprocessCSV {
     val csv_DF = sqlc.read.format("csv")
       .option("header", "true")
       .option("inferSchema", "true")
-      .load(inputPath + "1996.csv")
+      .load(inputPath + "2007.csv")
 
     val cleanInitial_DF = csv_DF.drop("ArrTime")
       .drop("ActualElapsedTime")
