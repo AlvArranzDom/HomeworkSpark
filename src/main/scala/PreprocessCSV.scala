@@ -32,7 +32,10 @@ object PreprocessCSV {
 
     for (file <- listFiles) {
       if (file.getName.contains(".csv")) {
-        file.renameTo(new File(dir + "/normalized.csv"))
+        val extension = file.getName.split("\\.").last
+        if(extension=="csv"){
+          file.renameTo(new File(dir + "/normalized.csv"))
+        }
       }
     }
   }
