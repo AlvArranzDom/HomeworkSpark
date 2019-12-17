@@ -56,8 +56,10 @@ object TrainingModelsFunctions {
       .setLabelCol("label")
       .setPredictionCol("prediction")
       .setMetricName("accuracy")
+
     val accuracy = evaluator.evaluate(predictions)
-    println(s"Test Error = ${(1.0 - accuracy)}")
+    println(s"Accuracy = ${accuracy}")
+
 
     model
   }

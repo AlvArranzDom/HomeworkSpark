@@ -1,7 +1,10 @@
 # HomeworkSpark
 
+In this project is used the Scala version `2.11.12`.
+
 ## Project Dependencies
 
+ - Argot (`v1.0.4`)
  - Spark Core Library (`v2.4.4`)
  - Spark SQL Library (`v2.4.4`)
  - Spark MLlib Library (`v2.4.4`)
@@ -21,11 +24,6 @@
     │   
     └───main
         │   
-        └───resources
-        │   │   
-        │   └───input -> Input CSV Folder
-        │       │-- README.md
-        │   
         └───scala
             │-- SparkAssignment.scala -> Main Object to execute the application.
             │   
@@ -38,7 +36,45 @@
                     │-- TrainingModelsFunctions.scala -> Object with functions to train ML models.
 ```
 
+## How to Install SBT
+#### Installing sbt on macOS
+-  Homebrew
+```
+    $ brew install sbt
+```
+-  SDKMAN!
+```
+    $ sdk install sbt
+```
+#### Installing sbt on Windows
+##### Install JDK 
+- Follow the link to install [JDK 8 or 11](https://adoptopenjdk.net/).
+
+#####  Installing from a universal package 
+- Download [ZIP](https://piccolo.link/sbt-1.3.4.zip) or [TGZ](https://piccolo.link/sbt-1.3.4.tgz) package and expand it.
+
+##### Windows installer 
+- Download [msi installer](https://piccolo.link/sbt-1.3.4.msi) and install it.
+
+#### Installing sbt on Linux
+
+- To install both JDK and sbt, consider using [SDKMAN](https://sdkman.io/).
+```
+    $ sdk list java
+    $ sdk install java 11.0.4.hs-adpt
+    $ sdk install sbt
+```
+
 ## How to execute the project
+
+After installing SBT, execute the next commands:
+```
+    $ cd HomeworkSpark
+    $ sbt compile
+    $ sbt "run -f file_path -m model_name"
+```
+
+## How the project works
 
 1. Execute **PreprocessCSV**. This scala object will follow the next steps:
     1. Clean Initial Information that is mandatory to delete.
