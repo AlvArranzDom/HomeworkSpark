@@ -1,32 +1,16 @@
-package helpers
+package main.helpers
 
 import org.apache.spark.ml.feature.{MinMaxScaler, StringIndexer, VectorAssembler}
 import org.apache.spark.ml.linalg.{DenseVector, Vectors}
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.functions.{col, sum, udf}
-import org.apache.spark.sql.types.{DoubleType, IntegerType}
+import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.types.DoubleType
 
 /**
  * Object that has all the functions related to the transformation and preparation of the
  * dataset for training ML models.
  */
 object DataFrameFunctions {
-
-  /**
-   * Function that drop NA values inside a DataSet.
-   *
-   * @param df entry dataset to be analyzed and modified.
-   * @return modified dataset
-   */
-  def dropNAValues(df: DataFrame): DataFrame = {
-    df.select(df.columns.map(c => sum(col(c).isNull.cast(IntegerType)).alias(c)): _*).show()
-    println("Number of rows before removal: " + df.count())
-
-    val clean_DF = df.na.drop()
-    println("Number of rows after removal: " + clean_DF.count())
-
-    clean_DF
-  }
 
   /**
    * Function that normalized a column with the StringIndexer method in a specific dataset.
@@ -45,7 +29,7 @@ object DataFrameFunctions {
       .drop(inputCol)
       .withColumnRenamed(inputCol + "Scaled", inputCol)
 
-    minMaxScaler(indexed_DF, inputCol)
+    indexed_DF
   }
 
   /**
@@ -81,7 +65,7 @@ object DataFrameFunctions {
    * @param df entry dataset to be normalized and modified.
    * @return modified dataset
    */
-  def normalizedDataFrame(df: DataFrame, exceptionColumns: Array[String] = Array("")): DataFrame = {
+  private def normalizeStringColumnsDataFrame(df: DataFrame): DataFrame = {
     var normalized_DF = df
     val colNamesList = normalized_DF.columns
     val columnDataTypes: Array[String] = normalized_DF.schema.fields.map(x => x.dataType).map(x => x.toString)
@@ -90,10 +74,33 @@ object DataFrameFunctions {
       val colName = colNamesList(i)
       val colDataType = columnDataTypes(i)
 
-      if (!exceptionColumns.contains(colName)) {
+      if (colName != "label") {
         if (colDataType == "StringType") {
           normalized_DF = stringIndexer(normalized_DF, colName)
-        } else {
+        }
+      }
+    }
+
+    normalized_DF
+  }
+
+  /**
+   * Function that normalized the entry dataset spliting the variables between the StringType ones above the others.
+   *
+   * @param df entry dataset to be normalized and modified.
+   * @return modified dataset
+   */
+  private def normalizeNumericColumnsDataFrame(df: DataFrame): DataFrame = {
+    var normalized_DF = df
+    val colNamesList = normalized_DF.columns
+    val columnDataTypes: Array[String] = normalized_DF.schema.fields.map(x => x.dataType).map(x => x.toString)
+
+    for (i <- colNamesList.indices) {
+      val colName = colNamesList(i)
+      val colDataType = columnDataTypes(i)
+
+      if (colName != "label") {
+        if (colDataType != "StringType") {
           normalized_DF = minMaxScaler(normalized_DF, colName)
         }
       }
@@ -108,10 +115,10 @@ object DataFrameFunctions {
    * VectorAssembler.
    *
    * @param df        entry dataset to be analyzed and modified.
-   * @param threshold acceptance value for the correlations
+   * @param threshold acceptance positive value for the correlations
    * @return modified dataset
    */
-  private def calculateAndEvaluateCorrelations(df: DataFrame, threshold: Double): DataFrame = {
+  private def calculateAndEvaluateCorrelations(df: DataFrame, threshold: Double): (DataFrame, Array[String]) = {
     var filtered_DF = df
     val colNamesList = df.columns
     var featuresColsNames = Array[String]()
@@ -122,6 +129,7 @@ object DataFrameFunctions {
       if (colName != "label") {
         var correlation = df.stat.corr("label", colName)
         correlation = Math.abs(correlation)
+
         if (correlation < threshold) {
           filtered_DF = filtered_DF.drop(colName)
         } else {
@@ -131,14 +139,7 @@ object DataFrameFunctions {
       }
     }
 
-    val assembler = new VectorAssembler().setInputCols(featuresColsNames).setOutputCol("features")
-
-    val model_DF = assembler.transform(filtered_DF)
-
-    model_DF.printSchema()
-    model_DF.show(5)
-
-    model_DF
+    (filtered_DF, featuresColsNames)
   }
 
   /**
@@ -152,11 +153,19 @@ object DataFrameFunctions {
   def createDataFrameForModel(df: DataFrame, labelColName: String, threshold: Double = 0.3): DataFrame = {
     var filtered_DF = df.withColumnRenamed(labelColName, "label")
 
-    filtered_DF = calculateAndEvaluateCorrelations(filtered_DF, threshold)
+    // Normalize DataFrame String Columns using StringIndexer
+    filtered_DF = normalizeStringColumnsDataFrame(filtered_DF)
 
-    filtered_DF.printSchema()
-    filtered_DF.show(5)
+    // Drop the columns with low correlation value
+    val (clean_DF, featuresColsNames) = calculateAndEvaluateCorrelations(filtered_DF, threshold)
 
-    filtered_DF
+    // Normalize DataFrame Numeric Columns using MinMaxScales
+    val normalized_DF = normalizeNumericColumnsDataFrame(clean_DF)
+
+    // Create Features Vector
+    val assembler = new VectorAssembler().setInputCols(featuresColsNames).setOutputCol("features")
+    val model_DF = assembler.transform(normalized_DF)
+
+    model_DF
   }
 }

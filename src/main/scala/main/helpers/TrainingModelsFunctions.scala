@@ -1,9 +1,10 @@
-package helpers
+package main.helpers
 
 import org.apache.spark.ml.classification.{RandomForestClassificationModel, RandomForestClassifier}
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, MulticlassClassificationEvaluator, RegressionEvaluator}
 import org.apache.spark.ml.regression.{GBTRegressionModel, GBTRegressor, LinearRegression, LinearRegressionModel, RandomForestRegressionModel, RandomForestRegressor}
 import org.apache.spark.sql.DataFrame
+
 /**
  * Object that has all the functions related to create, fit & transforming ML models.
  */
@@ -33,7 +34,7 @@ object TrainingModelsFunctions {
     } else if (modelName == "rfr") {
       trainRandomForestRegression(training, test)
     } else {
-      println(s"Model don't implemented to be trained. \n Please use 'lr' to train ")
+      println(s"Model don't implemented to be trained. \n Please review the doc to know which models are available.")
     }
   }
 
@@ -77,7 +78,6 @@ object TrainingModelsFunctions {
     // Show the model metrics
     val trainingSummary = model.summary
     println(s"numIterations: ${trainingSummary.totalIterations}")
-    println(s"objectiveHistory: [${trainingSummary.objectiveHistory.mkString(",")}]")
     trainingSummary.residuals.show()
     println(s"RMSE: ${trainingSummary.rootMeanSquaredError}")
     println(s"r2: ${trainingSummary.r2}")
@@ -92,6 +92,7 @@ object TrainingModelsFunctions {
 
     model
   }
+
   /**
    * Train a Gradient-boosted tree regression Model.
    *
@@ -100,13 +101,14 @@ object TrainingModelsFunctions {
    * @return result model
    */
   private def trainGBTreeRegression(training: DataFrame, test: DataFrame): GBTRegressionModel = {
-    val gb = new GBTRegressor()
+    val gbtr = new GBTRegressor()
       .setMaxIter(30)
       .setLabelCol("label")
       .setFeaturesCol("features")
-    val model = gb.fit(training)
 
-    val predictions = model.transform(test)
+    val model_gb = gbtr.fit(training)
+
+    val predictions = model_gb.transform(test)
     predictions.select("prediction", "label", "features").show(5)
 
     val evaluator = new RegressionEvaluator()
@@ -117,16 +119,16 @@ object TrainingModelsFunctions {
     val rmse = evaluator.evaluate(predictions)
     println(s"Root Mean Squared Error (RMSE) on test data $rmse")
 
-    model
+    model_gb
   }
 
   private def trainRandomForestRegression(training: DataFrame, test: DataFrame): RandomForestRegressionModel = {
-    val rf = new RandomForestRegressor()
+    val rfr = new RandomForestRegressor()
       .setLabelCol("label")
       .setFeaturesCol("features")
-    val model = rf.fit(training)
+    val model_rfr = rfr.fit(training)
 
-    val predictions = model.transform(test)
+    val predictions = model_rfr.transform(test)
     predictions.select("prediction", "label", "features").show(5)
 
     val evaluator = new RegressionEvaluator()
@@ -137,6 +139,6 @@ object TrainingModelsFunctions {
     val rmse = evaluator.evaluate(predictions)
     println(s"Root Mean Squared Error (RMSE) on test data $rmse")
 
-    model
+    model_rfr
   }
-  }
+}

@@ -27,12 +27,15 @@
         │       │-- README.md
         │   
         └───scala
+            │-- SparkAssignment.scala -> Main Object to execute the application.
             │   
-            └───helpers
-            │   │-- DataFrameFunctions.scala -> Object with functions to modify dataframes.
-            │   │-- TrainingModelsFunctions.scala -> Object with functions to train ML models.
-            │-- PreprocessCSV.scala -> Main Object to preprocess and prepare dataframe.
-            │-- PreprocessCSV.scala -> Main Object to study and train ML Models.
+            └───main
+                │-- PreprocessCSV.scala -> Main Object to preprocess and prepare dataframe.
+                │-- StudyTrainModels.scala -> Main Object to study and train ML Models.
+                │
+                └───helpers
+                    │-- DataFrameFunctions.scala -> Object with functions to modify dataframes.
+                    │-- TrainingModelsFunctions.scala -> Object with functions to train ML models.
 ```
 
 ## How to execute the project
@@ -58,7 +61,8 @@
 
 #### Regression
  - Linear Regression (`modelName = 'lr'`)`
+ - Random Forest Regression (`modelName = 'gbtr'`)`
+ - Gradient Boosting Tree Regression (`modelName = 'rfr'`)`
  
-
 #### Classification
- - Random Forest Classifier (`modelName = 'rf'`)
+ - Random Forest Classifier (`modelName = 'rfc'`)
